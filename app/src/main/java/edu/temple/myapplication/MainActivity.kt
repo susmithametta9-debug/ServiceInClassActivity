@@ -1,6 +1,7 @@
 package edu.temple.myapplication
 
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import androidx.appcompat.app.AppCompatActivity
@@ -18,20 +19,18 @@ class MainActivity : AppCompatActivity() {
     private var timerService: TimerService? = null
     private var isConnected = false
 
-    // This handles the message from the Service to update the UI
     private val timerHandler = Handler(Looper.getMainLooper()) {
         val textView = findViewById<TextView>(R.id.textView)
         textView.text = it.what.toString()
         
-        // If it hits 0, update the buttons back to "Start"
         if (it.what == 0) {
             findViewById<Button>(R.id.startButton).text = "Start"
+            getSharedPreferences("TimerPrefs", Context.MODE_PRIVATE).edit().clear().apply()
             invalidateOptionsMenu()
         }
         true
     }
 
-    // This connects our Activity to the Service
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             val binder = service as TimerService.TimerBinder
@@ -52,18 +51,19 @@ class MainActivity : AppCompatActivity() {
         val startButton = findViewById<Button>(R.id.startButton)
         val stopButton = findViewById<Button>(R.id.stopButton)
 
-        // Bind to the service when the activity starts
         bindService(
             Intent(this, TimerService::class.java),
             serviceConnection,
-            BIND_AUTO_CREATE
+            Context.BIND_AUTO_CREATE
         )
 
         startButton.setOnClickListener {
             if (isConnected) {
                 val service = timerService!!
                 if (!service.isRunning) {
-                    service.start(100)
+                    val prefs = getSharedPreferences("TimerPrefs", Context.MODE_PRIVATE)
+                    val savedValue = prefs.getInt("pausedValue", 100)
+                    service.start(savedValue)
                     startButton.text = "Pause"
                 } else {
                     service.pause()
@@ -83,13 +83,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Create the menu items (Start and Stop)
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menuInflater.inflate(R.menu.timer_menu, menu)
         return true
     }
 
-    // Update menu text (Pause/Unpause) before it shows
     override fun onPrepareOptionsMenu(menu: Menu?): Boolean {
         val startItem = menu?.findItem(R.id.action_start)
         timerService?.let {
@@ -102,7 +100,6 @@ class MainActivity : AppCompatActivity() {
         return super.onPrepareOptionsMenu(menu)
     }
 
-    // Handle clicks on the menu items
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.action_start -> {

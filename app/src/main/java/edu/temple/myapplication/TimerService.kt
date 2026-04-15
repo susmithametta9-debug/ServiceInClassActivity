@@ -1,6 +1,7 @@
 package edu.temple.myapplication
 
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.os.Binder
 import android.os.Handler
@@ -10,10 +11,14 @@ class TimerService : Service() {
 
     var isRunning = false
     var isPaused = false
+    var currentValue = 0
     private var timerHandler: Handler? = null
     private var timerThread: Thread? = null
 
-    // This is what the Activity will use to talk to the Service
+    private val preferences by lazy {
+        getSharedPreferences("TimerPrefs", Context.MODE_PRIVATE)
+    }
+
     inner class TimerBinder : Binder() {
         fun getService() = this@TimerService
     }
@@ -30,24 +35,20 @@ class TimerService : Service() {
         if (!isRunning) {
             isRunning = true
             isPaused = false
+            currentValue = startValue
             
-            // Start a background thread to count down
             timerThread = Thread {
                 try {
-                    for (i in startValue downTo 0) {
-                        // Update the UI
-                        timerHandler?.sendEmptyMessage(i)
-                        
-                        // If paused, wait here
+                    while (currentValue >= 0) {
+                        timerHandler?.sendEmptyMessage(currentValue)
                         while (isPaused) {
                             Thread.sleep(100)
                         }
-                        
-                        // Wait one second
                         Thread.sleep(1000)
+                        currentValue--
                     }
+                    preferences.edit().remove("pausedValue").apply()
                 } catch (e: InterruptedException) {
-                    // This happens when we call stop()
                 } finally {
                     isRunning = false
                     isPaused = false
@@ -60,6 +61,11 @@ class TimerService : Service() {
     fun pause() {
         if (isRunning) {
             isPaused = !isPaused
+            if (isPaused) {
+                preferences.edit().putInt("pausedValue", currentValue).apply()
+            } else {
+                preferences.edit().remove("pausedValue").apply()
+            }
         }
     }
 
@@ -67,5 +73,14 @@ class TimerService : Service() {
         timerThread?.interrupt()
         isRunning = false
         isPaused = false
+        currentValue = 0
+        preferences.edit().remove("pausedValue").apply()
+    }
+
+    override fun onUnbind(intent: Intent?): Boolean {
+        if (!isPaused) {
+            preferences.edit().remove("pausedValue").apply()
+        }
+        return super.onUnbind(intent)
     }
 }
